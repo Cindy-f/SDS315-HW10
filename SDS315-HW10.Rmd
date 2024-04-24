@@ -1,0 +1,161 @@
+---
+author: "Zhou Fan"
+date: "2024-04-23"
+output: html_document
+---
+
+### SDS315-HW10
+### Name: Zhou Fan
+### UT EID: zf2949
+### Github link: https://github.com/Cindy-f/SDS315-HW10.git
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(mosaic)
+library(stringr)
+library(kableExtra)
+library(ggplot2)
+library(kableExtra)
+library(knitr)
+library(MatchIt)
+library(dplyr)
+library(boot)
+library(effectsize)
+library(moderndive)
+
+
+redline <- read.csv('redlining.csv')
+groceries <- read.csv('groceries.csv')
+```
+
+
+### Problem 1: Redlining
+
+#### (1) Question:
+What is the association between the racial/ethnic composition of ZIP codes in Chicago and the number of FAIR insurance policies per 100 housing units, after controlling for potential confounding factors like fire hazards, age of housing, and income levels?
+
+#### (2) Approach: 
+We will use multiple linear regression to examine this relationship. This statistical tool will allow us to adjust for multiple confounding factors simultaneously and quantify the association between the percentage of minority residents and the number of FAIR policies issued per 100 housing units.
+
+#### (3) Results:
+```{r, echo = FALSE}
+
+lm0 <- lm(policies ~ minority + fire + age + income, data = redline)
+
+get_regression_table(lm0)
+
+# standardized coefficients:
+standardize_parameters(lm0)
+
+```
+
+As shown by the regression table and the standardized coeffecients table above:
+<1> Minority: the p-value of minority (0.006) is smaller than 0.05, which indicates a statistically significant positive relationship between the percentage of minority residents and the number of FAIR policies issued. The confidence interval (0.003 to 0.014) does not include zero, affirming the significance of this predictor. With a standardized coefficient of 0.43, the percentage of minority residents has a moderate and significant positive impact on the number of FAIR policies.
+
+<2> fire: The coefficient for fire is 0.022 with a p-value of 0.018, indicating that this is also a statistically significant predictor. The positive coefficient implies that higher fire incidences per 100 housing units are associated with a higher number of FAIR policies, potentially reflecting higher risk perceptions by insurers. The confidence interval (0.004 to 0.040) excludes zero, supporting the significance of this variable. The standardized coefficient of 0.32 for fire incidents suggests that this is also a significant predictor, though slightly less impactful than racial composition.
+
+<3> age: The age variable, representing the percent of housing units built before WWII, has a coefficient of 0.006 and a p-value of 0.143. This suggests that the relationship between housing age and the number of FAIR policies is not statistically significant, as the confidence interval includes zero (-0.002 to 0.013). The standardized coefficient of 0.18 for age, although positive, has a wide confidence interval that includes zero, aligning with the previous analysis that it is not a significant predictor.
+
+<4> income: The coefficient for income is -0.016 with a high p-value of 0.679, indicating no significant association between median family income and the number of FAIR policies. The negative coefficient suggests that higher incomes would be associated with fewer FAIR policies, but the lack of statistical significance and the confidence interval that includes zero (-0.094 to 0.062) mean that this is not a reliable inference. The negative standardized coefficient of -0.07 for income and its wide confidence interval indicate that it has a minimal and non-significant impact on the number of FAIR policies.
+
+
+#### (4) Conclusion: 
+The regression analysis substantiates the presence of a significant association between the racial/ethnic composition of ZIP codes and the issuance of FAIR insurance policies, even after accounting for variables such as fire risk, the age of housing, and income. Particularly, the findings reveal that ZIP codes with a higher percentage of minority residents tend to have more FAIR policies per 100 housing units, suggesting that these areas might be facing challenges in securing private insurance.
+
+### Problem 2: Grocery store prices
+
+#### Part A: 
+
+```{r, echo = FALSE}
+# create a new column of 'store_type', which differentiate all 16 store types. 
+groceries_assorted = groceries %>%
+  mutate(
+    store_type = case_when(
+      Store == 'H-E-B ' & City == 'Houston' ~ 'H-E-B (Houston)',
+      Store == 'H-E-B ' & City == 'Austin' ~ 'H-E-B (Austin)',
+      Store == 'Whole Foods' & City == 'Houston' ~ 'Whole Foods (Houston)',
+      Store == 'Whole Foods' & City == 'Austin' ~ 'Whole Foods (Austin)',
+      TRUE ~ Store
+    )
+  )
+  
+# group data by different store_type. 
+average_prices <- groceries_assorted %>%
+  group_by(store_type) %>%
+  summarise(Average_Price = mean(Price, na.rm = TRUE))
+
+# Plotting the data
+ggplot(average_prices, aes(x = reorder(store_type, -Average_Price), y = Average_Price, fill = store_type)) +
+  geom_bar(stat = "identity", color = 'black') +
+  coord_flip() +  # Flip the coordinates to have store on the vertical axis
+  labs(x = "Store",
+       y = "Average Price ($)",
+       title = "Average Price of Products by Store",
+       caption = "Data from Texas grocery stores") +
+  theme_classic()
+
+```
+
+#### Part B: 
+
+```{r, echo = FALSE}
+# data wrangling
+product_availability <- groceries_assorted %>%
+  group_by(Product) %>%
+  summarise(Stores_Selling = n_distinct(store_type))
+
+# plot: 
+ggplot(product_availability, aes(x = reorder(Product, -Stores_Selling), y = Stores_Selling, fill = Product)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +  # Flip axes to have Product on the vertical axis
+  labs(x = "Product",
+       y = "Number of Stores Selling",
+       title = "Availability of Products Across Stores",
+       caption = "Each bar represents the number of stores that sell each product. Products like eggs and milk are available in all 16 stores, indicating widespread availability.") +
+  theme_classic() +
+  guides(fill = FALSE)
+
+```
+
+#### Part C: 
+
+```{r, echo = FALSE}
+groceries$Type <- relevel(as.factor(groceries$Type), ref = 'Grocery')
+lm1 <- lm(Price ~ Product + Type, data = groceries)
+get_regression_table(lm1)
+
+```
+Fill in the blanks: “Compared with ordinary grocery stores (like Albertsons, HEB, or Krogers), convenience stores charge somewhere between 0.41 and 0.92 dollars more for the same product.” 
+
+
+#### Part D:
+
+```{r, echo = FALSE}
+
+groceries$Store <- relevel(as.factor(groceries$Store), ref = 'Central Market') # Manually set 'Central Market' to the base category.
+lm2 <- lm(Price ~ Product + Store, data = groceries)
+get_regression_table(lm2)
+
+```
+Kroger Fresh Fare and Walmart seem to charge the lowest prices when comparing the same product. Wheatsville Food Co-Op and Whole Foods seem to charge the highest prices when comparing the same product. The HEB/Central Market difference is -0.073, which is relatively small compared to differences among other stores (e.g: CVS/Central Market difference is 0.766, Walgreens/Central Market difference is 0.789, Wheatsville Food Co-Op/Central Market difference is 0.864, Whole Foods/Central Market difference is 0.938, which are all much more larger than the absolute value of the HEB/Central Market difference.)
+
+#### Part E:
+Our model in part D takes 'Central Market' as its base category for Store variable. The coefficient of 'H-E-B' is -0.073, with a p_value of 0.661 (greater than 0.05), which means the influence of Store being 'H-E-B' rather than 'Central Market' is not statistically significant to our price variable given the same product. The confidence interval of it is [-0.398, 0.253], which contains zero and reaffirms that it is not statistically significant. Therefore, the second claim 'Central Market charges a similar amount to HEB for the same product' is right. 
+
+#### Part F: 
+
+```{r, echo = FALSE}
+# Create a new column for Income10K: 
+groceries_Income10K = groceries %>%
+  mutate(Income10K = Income/10000)
+
+lm3 <- lm(Price ~ Product + Income10K, data = groceries_Income10K)
+
+get_regression_table(lm3)
+standardize_parameters(lm3)
+
+```
+
+Since the sign of 'Income10K' is negative, we learn that consumers in poorer ZIP codes seem to pay less for the same product, on average. We know that because a negative coefficient for income variable means that any positive increase in income results in a lowered price for products.
+Fill in the blank: “A one-standard deviation increase in the income of a ZIP code seems to be associated with a -0.03 standard-deviation change in the price that consumers in that ZIP code expect to pay for the same product.” 
